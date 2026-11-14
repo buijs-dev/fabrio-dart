@@ -1,0 +1,16 @@
+name: fabrio_generator
+description: The Rialto client generator of Fabrio. Slice 0 - the contract frontend and the client IR (pure Dart).
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+resolution: workspace
+
+dependencies:
+  # Rialto tooling: until it is published, the workspace root overrides it with a path dependency.
+  rialto_contract: ^0.1.0
+
+dev_dependencies:
+  test: ^1.31.0

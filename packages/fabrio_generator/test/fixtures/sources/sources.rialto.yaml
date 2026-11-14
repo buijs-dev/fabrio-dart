@@ -1,0 +1,7 @@
+# Two versions of one API, the old one deprecated, and an AsyncAPI source that a client does not call.
+rialto: "1.0.0"
+info: {name: shipment, version: 2.0.0}
+sources:
+  api: {kind: openapi, path: openapi-v2.yaml, version: 2.0.0, status: current}
+  apiV1: {kind: openapi, path: openapi-v1.yaml, version: 1.0.0, status: deprecated, deprecated: 2026-01-01, successor: api}
+  events: {kind: asyncapi, path: asyncapi.yaml, version: 1.0.0, status: current}
