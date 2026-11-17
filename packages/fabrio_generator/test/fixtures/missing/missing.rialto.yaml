@@ -1,0 +1,5 @@
+# An OpenAPI source whose document is not there.
+rialto: "1.0.0"
+info: {name: missing, version: 1.0.0}
+sources:
+  api: {kind: openapi, path: openapi.yaml, version: 1.0.0, status: current}

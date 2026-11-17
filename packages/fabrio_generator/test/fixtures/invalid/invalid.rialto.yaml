@@ -1,0 +1,3 @@
+# Not valid against the JSON Schema: info has no version.
+rialto: "1.0.0"
+info: {name: invalid}
