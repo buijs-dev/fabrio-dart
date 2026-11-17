@@ -47,6 +47,23 @@ void main() {
     expect(problems, isEmpty);
   });
 
+  test('a contract whose source cannot be read gives no IR, and the diagnostic of the source (K1.9)', () {
+    final (:ir, :diagnostics, :problems) = read('$fixtures/missing/missing.rialto.yaml');
+    expect(ir, isNull);
+    expect(diagnostics.map((d) => (d.id, d.severity, d.location.pointer)), [
+      ('RIALTO-S001', Severity.error, '/sources/api/path'),
+    ]);
+    expect(problems, isEmpty);
+  });
+
+  test('a contract file that does not exist gives no IR', () {
+    final (:ir, :diagnostics, :problems) = read('$fixtures/nowhere.rialto.yaml');
+    expect(ir, isNull);
+    expect(diagnostics, isNotEmpty);
+    expect(diagnostics.every((d) => d.severity == Severity.error), isTrue);
+    expect(problems, isEmpty);
+  });
+
   group('options (K1.6)', () {
     test('sources selects the OpenAPI sources the app calls, deprecated ones too', () {
       final (:ir, :problems, diagnostics: _) = read(sourcesContract, const {'sources': 'apiV1'});
@@ -76,12 +93,110 @@ void main() {
       expect(ir!.apis.single.basePath, '');
     });
 
+    test('sources keeps the order of the contract, and calls a source named twice once', () {
+      final (:ir, :problems, diagnostics: _) = read(sourcesContract, const {
+        'sources': 'apiV1, api ,apiV1',
+        'api.suffix': 'V2',
+        'apiV1.suffix': 'V1',
+      });
+      expect(problems, isEmpty);
+      expect(ir!.apis.map((api) => api.source), ['api', 'apiV1']);
+
+      final once = read(sourcesContract, const {'sources': 'api,api'});
+      expect(once.problems, isEmpty);
+      expect(once.ir!.apis, [const ApiIR(source: 'api', suffix: '', basePath: '/v2')]);
+    });
+
+    test('sources without a name calls no source', () {
+      for (final option in ['', ' , ']) {
+        final (:ir, :problems, diagnostics: _) = read(sourcesContract, {'sources': option});
+        expect(problems, isEmpty);
+        expect(ir!.apis, isEmpty);
+      }
+    });
+
+    test('a single source takes a suffix too', () {
+      final (:ir, :problems, diagnostics: _) = read(sourcesContract, const {'api.suffix': 'Shipment'});
+      expect(problems, isEmpty);
+      expect(ir!.apis.single.suffix, 'Shipment');
+    });
+
+    test('options the frontend does not read are left to the other stages, also those of a source not called', () {
+      final (:ir, :problems, diagnostics: _) = read(sourcesContract, const {
+        'package': 'shipment_client',
+        'apiV1.suffix': 'V1',
+        'apiV1.basePath': '/old',
+        'events.suffix': 'Events',
+      });
+      expect(problems, isEmpty);
+      expect(ir!.apis, [const ApiIR(source: 'api', suffix: '', basePath: '/v2')]);
+    });
+
     test('a source that is unknown or no OpenAPI source is reported', () {
       final (:ir, :problems, diagnostics: _) = read(sourcesContract, const {'sources': 'nope,events'});
       expect(ir!.apis, isEmpty);
       expect(problems.map((p) => p.message), [contains('"nope"'), contains('"events"')]);
       expect(problems.every((p) => p.severity == Severity.error), isTrue);
+      expect(problems.map((p) => p.location.pointer), everyElement('/sources'));
+      expect(problems.first.location.line, 4);
     });
+
+    test('a known source is still called next to an unknown one', () {
+      final (:ir, :problems, diagnostics: _) = read(sourcesContract, const {'sources': 'api,nope'});
+      expect(problems.single.message, contains('"nope"'));
+      expect(ir!.apis.map((api) => api.source), ['api']);
+    });
+  });
+
+  group('the base path, from the first server URL', () {
+    String basePath(String servers) {
+      final document = LocatedDocument.parse('openapi: 3.1.0\n$servers\npaths: {}\n', 'openapi.yaml');
+      final sources = Sources({'api': DocumentSource('api', document.file, document)});
+      final contract = Contract({
+        'rialto': '1.0.0',
+        'info': {'name': 'json', 'version': '1.0.0'},
+        'sources': {
+          'api': {'kind': 'openapi', 'path': 'openapi.yaml', 'version': '1.0.0', 'status': 'current'},
+        },
+      });
+      final problems = Problems.at(Location.new, sources);
+      final ir = ContractFrontend(contract, sources, problems).read();
+      expect(problems.all, isEmpty);
+      return ir.apis.single.basePath;
+    }
+
+    test('is the path of that URL, without a trailing slash', () {
+      expect(basePath('servers: [{url: "https://a.invalid/v2/"}, {url: "https://b.invalid/v3"}]'), '/v2');
+      expect(basePath('servers: [{url: "https://a.invalid/api/v2"}]'), '/api/v2');
+      expect(basePath('servers: [{url: /v4}]'), '/v4');
+    });
+
+    test('is empty for a URL without a path, without servers, or for a server without a URL', () {
+      expect(basePath('servers: [{url: "https://a.invalid"}]'), '');
+      expect(basePath('servers: [{url: "https://a.invalid/"}]'), '');
+      expect(basePath('servers: []'), '');
+      expect(basePath('servers: [{description: none}]'), '');
+      expect(basePath('info: {title: no servers, version: 1.0.0}'), '');
+    });
+  });
+
+  test('a source document that is no mapping is reported, not read', () {
+    final document = LocatedDocument.parse('- not an OpenAPI document\n', 'list.yaml');
+    final sources = Sources({'api': DocumentSource('api', document.file, document)});
+    final contract = Contract({
+      'rialto': '1.0.0',
+      'info': {'version': '1.0.0'},
+      'sources': {
+        'api': {'kind': 'openapi', 'path': 'list.yaml', 'version': '1.0.0', 'status': 'current'},
+      },
+    });
+    final problems = Problems.at(Location.new, sources);
+    final ir = ContractFrontend(contract, sources, problems).read();
+    // Without info.name, which only a contract that skipped validation lacks, the client is named app.
+    expect(ir.name, 'app');
+    expect(ir.apis, isEmpty);
+    expect(problems.hasErrors, isTrue);
+    expect(problems.all.single.message, 'the OpenAPI source "api" could not be read');
   });
 
   test('a contract that arrives as JSON reads the same, located by the caller', () {

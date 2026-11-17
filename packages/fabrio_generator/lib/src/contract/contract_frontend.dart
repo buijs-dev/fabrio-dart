@@ -33,14 +33,17 @@ final class ContractFrontend {
   final Problems problems;
   final Map<String, String> options;
 
-  /// Validates [file] and reads it, with [options]. Without a contract when it does not validate.
+  /// Validates [file] and reads it, with [options]. Without an IR when it does not validate: when the validator
+  /// reports an error, also one of its checks or a source that cannot be read (K1.7, K1.9).
   static ({ClientIR? ir, List<Diagnostic> diagnostics, List<Problem> problems}) readFile(
     String file, {
     Map<String, String> options = const {},
   }) {
     final validated = ContractValidator.validate(file);
     final contract = validated.contract;
-    if (contract == null) return (ir: null, diagnostics: validated.diagnostics, problems: const []);
+    if (contract == null || !validated.valid) {
+      return (ir: null, diagnostics: validated.diagnostics, problems: const []);
+    }
     final document = ContractFiles.read(file, Diagnostics())!;
     final diagnostics = Diagnostics();
     final sources = Sources.load(contract, document, diagnostics);
@@ -72,10 +75,10 @@ final class ContractFrontend {
           if (value['status'] != 'deprecated') key,
       ];
     }
-    final names = [
+    final names = {
       for (final name in option.split(','))
         if (name.trim().isNotEmpty) name.trim(),
-    ];
+    };
     for (final name in names) {
       if (!openApi.containsKey(name)) {
         problems.error(
@@ -84,9 +87,10 @@ final class ContractFrontend {
         );
       }
     }
+    // In contract order, as the IR has them, whatever the order of the option; a name given twice is called once.
     return [
-      for (final name in names)
-        if (openApi.containsKey(name)) name,
+      for (final name in openApi.keys)
+        if (names.contains(name)) name,
     ];
   }
 
