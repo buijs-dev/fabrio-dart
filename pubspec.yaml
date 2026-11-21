@@ -1,0 +1,18 @@
+name: fabrio_dart_workspace
+publish_to: none
+
+environment:
+  sdk: ^3.11.0
+
+# The packages arrive slice by slice on the way to 1.0.0 (see the README). Slice 0 holds the contract frontend and
+# the IR of the generator.
+workspace:
+  - packages/fabrio_generator
+
+dev_dependencies:
+  lints: ^6.0.0
+
+# The Rialto generator library (rialto-dart) is not published yet: a path dependency to a checkout next to this
+# repository (../../rialto/rialto-dart). Overrides apply to the whole workspace.
+dependency_overrides:
+  rialto_generator: {path: ../../rialto/rialto-dart/packages/rialto_generator}
