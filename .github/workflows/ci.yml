@@ -1,0 +1,41 @@
+name: CI
+
+# Format, analysis and tests (tool/ci.sh). The workspace takes rialto-dart as a path dependency
+# (../../rialto/rialto-dart), so it is checked out next to this repository: at the branch with the name of this one
+# when it exists (the same slice), otherwise at develop.
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: fabrio/fabrio-dart
+      - id: tooling
+        name: Choose the rialto-dart branch
+        run: |
+          branch="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          if git ls-remote --exit-code --heads https://github.com/buijs-dev/rialto-dart.git "$branch" >/dev/null; then
+            echo "ref=$branch" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=develop" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        with:
+          repository: buijs-dev/rialto-dart
+          ref: ${{ steps.tooling.outputs.ref }}
+          path: rialto/rialto-dart
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+        working-directory: fabrio/fabrio-dart
+      - run: tool/ci.sh
+        working-directory: fabrio/fabrio-dart
