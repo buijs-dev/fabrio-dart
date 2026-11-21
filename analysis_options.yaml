@@ -1,0 +1,16 @@
+include: package:lints/recommended.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+
+# An if statement or a loop always has braces, with its body on a line of its own: never `if (x) return y;`.
+linter:
+  rules:
+    - always_put_control_body_on_new_line
+    - curly_braces_in_flow_control_structures
+
+formatter:
+  page_width: 120
